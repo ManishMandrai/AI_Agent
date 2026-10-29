@@ -1,7 +1,10 @@
-
 require("dotenv").config();
-
 const express = require("express");
+
+const Groq = require("groq-sdk");
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,36 +12,66 @@ const VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
 app.use(express.json());
 
+
+async function sendWhatsAppMessage(to, message) {
+    const response = await fetch(
+        `https://graph.facebook.com/${process.env.GRAPH_API_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                messaging_product: "whatsapp",
+                recipient_type: "individual",
+                to,
+                type: "text",
+                text: { body: message },
+            }),
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(JSON.stringify(data));
+    }
+
+    console.log("WhatsApp reply sent:", data.messages?.[0]?.id);
+}
+
+
 // Health check
 app.get("/", (req, res) => {
-  res.json({
-    success: true,
-    message: "WhatsApp AI Agent backend is running!",
-  });
+    res.json({
+        success: true,
+        message: "WhatsApp AI Agent backend is running!",
+    });
 });
 
 // Meta webhook verification
 app.get("/webhook", (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
 
-  if (
-    mode === "subscribe" &&
-    VERIFY_TOKEN &&
-    token === VERIFY_TOKEN &&
-    challenge
-  ) {
-    console.log("Webhook verified by Meta.");
-    return res.status(200).send(challenge);
-  }
+    if (
+        mode === "subscribe" &&
+        VERIFY_TOKEN &&
+        token === VERIFY_TOKEN &&
+        challenge
+    ) {
+        console.log("Webhook verified by Meta.");
+        return res.status(200).send(challenge);
+    }
 
-  return res.sendStatus(403);
+    return res.sendStatus(403);
 });
 
 
 app.get("/privacy", (req, res) => {
-  res.type("html").send(`<!DOCTYPE html>
+    res.type("html").send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -121,7 +154,7 @@ app.get("/privacy", (req, res) => {
 });
 
 app.get("/data-deletion", (req, res) => {
-  res.type("html").send(`<!DOCTYPE html>
+    res.type("html").send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -165,50 +198,82 @@ app.get("/data-deletion", (req, res) => {
 
 
 // Receive WhatsApp events
-app.post("/webhook", (req, res) => {
-  // Acknowledge promptly so Meta doesn't keep retrying.
-  res.sendStatus(200);
+app.post("/webhook", async (req, res) => {
+    // Acknowledge promptly so Meta doesn't keep retrying.
+    res.sendStatus(200);
 
-  const body = req.body;
+    const body = req.body;
 
-  if (
-    body.object !== "whatsapp_business_account" ||
-    !Array.isArray(body.entry)
-  ) {
-    return;
-  }
-
-  for (const entry of body.entry) {
-    for (const change of entry.changes || []) {
-      const value = change.value;
-
-      // Incoming messages
-      for (const message of value.messages || []) {
-        const sender = message.from;
-        const type = message.type;
-
-        const text =
-          type === "text" ? message.text?.body : `[${type} message]`;
-
-        console.log("Incoming WhatsApp message:", {
-          sender,
-          type,
-          text,
-          messageId: message.id,
-        });
-      }
-
-      // Delivery/read status updates are not customer messages.
-      for (const status of value.statuses || []) {
-        console.log("WhatsApp status update:", {
-          messageId: status.id,
-          status: status.status,
-        });
-      }
+    if (
+        body.object !== "whatsapp_business_account" ||
+        !Array.isArray(body.entry)
+    ) {
+        return;
     }
-  }
+
+    for (const entry of body.entry) {
+        for (const change of entry.changes || []) {
+            const value = change.value;
+
+            // Incoming messages
+            for (const message of value.messages || []) {
+                const sender = message.from;
+                const type = message.type;
+
+                const text =
+                    type === "text" ? message.text?.body : `[${type} message]`;
+
+                console.log("Incoming WhatsApp message:", {
+                    sender,
+                    type,
+                    text,
+                    messageId: message.id,
+                });
+
+
+                if (type === "text" && text?.trim()) {
+                    try {
+                        const completion = await groq.chat.completions.create({
+                            model: "llama-3.3-70b-versatile",
+                            messages: [
+                                {
+                                    role: "system",
+                                    content:
+                                        "You are a helpful WhatsApp business assistant. Reply naturally, politely, and concisely. If you don't know a business-specific answer, ask the customer for details instead of inventing information.",
+                                },
+                                {
+                                    role: "user",
+                                    content: text,
+                                },
+                            ],
+                            temperature: 0.7,
+                            max_tokens: 300,
+                        });
+
+                        const aiReply =
+                            completion.choices[0]?.message?.content?.trim();
+
+                        if (aiReply) {
+                            await sendWhatsAppMessage(sender, aiReply);
+                        }
+                    } catch (error) {
+                        console.error("AI reply failed:", error.message);
+                    }
+                }
+
+            }
+
+            // Delivery/read status updates are not customer messages.
+            for (const status of value.statuses || []) {
+                console.log("WhatsApp status update:", {
+                    messageId: status.id,
+                    status: status.status,
+                });
+            }
+        }
+    }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
