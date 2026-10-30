@@ -232,6 +232,36 @@ app.post("/webhook", async (req, res) => {
 
 
                 if (type === "text" && text?.trim()) {
+
+                    // Admin commands: pause or resume AI
+                    const adminNumber = (process.env.ADMIN_WHATSAPP_NUMBER || "").replace(/\D/g, "");
+                    const normalizedSender = String(sender || "").replace(/\D/g, "");
+
+                    if (type === "text" && normalizedSender === adminNumber) {
+                        const command = text.trim().toLowerCase();
+
+                        if (command === "#pause") {
+                            aiPaused = true;
+                            await sendWhatsAppMessage(sender, "⏸️ ManishAI is now paused. No automatic replies will be sent until you resume it with #resume.");
+                            console.log("AI paused by admin.");
+                            continue;
+                        }
+
+                        if (command === "#resume") {
+                            aiPaused = false;
+                            await sendWhatsAppMessage(sender, "▶️ ManishAI is back online! Automatic replies are now active.");
+                            console.log("AI resumed by admin.");
+                            continue;
+                        }
+                    }
+
+                    // Stop all automatic replies while paused
+                    if (aiPaused) {
+                        console.log("AI is paused. Skipping automatic reply.");
+                        continue;
+                    }
+
+
                     try {
                         const completion = await groq.chat.completions.create({
                             // model: "llama-3.3-70b-versatile",
