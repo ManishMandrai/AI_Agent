@@ -29,7 +29,8 @@ function buildPrompt(b) {
     ];
 
     const language = [
-        "Always reply in the language and script the customer writes in: Hindi in Devanagari → reply in Hindi (Devanagari); Hinglish (Hindi written in English letters) → reply in Hinglish; English → reply in English.",
+        // "Always reply in the language and script the customer writes in: Hindi in Devanagari → reply in Hindi (Devanagari); Hinglish (Hindi written in English letters) → reply in Hinglish; English → reply in English.",
+        "Always reply in the same language AND script the customer writes in. Hindi in Devanagari → reply in Hindi in Devanagari. Hindi written in English letters (Hinglish, like \"kya aap help kar sakte ho?\") → reply in Hinglish using English letters ONLY, never Devanagari. English → reply in English.",
         "If the customer switches language, switch with them.",
         `If the language is unclear (for example just "hi" or an emoji), reply in ${b.language.default}.`,
         `When you write English, use ${englishStyle}.`,

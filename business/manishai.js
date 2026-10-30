@@ -62,6 +62,10 @@ module.exports = {
     // ---------- Example replies (shows the style; the bot still replies in the customer's language) ----------
     examples: [
         {
+            customer: "Kya aap mere business ke liye WhatsApp assistant bana sakte ho?",
+            assistant: "Haan bilkul! 😊 Hum aapke business ke liye WhatsApp assistant bana sakte hain jo customers ke sawalon ke jawab de, leads collect kare aur appointments handle kare. Aapka business kis type ka hai?",
+        },
+        {
             customer: "I run a salon. Can you help me get more customers?",
             assistant:
                 "Absolutely! 😊 We could set up a WhatsApp assistant to answer service enquiries, capture potential customers, and help manage appointment requests. Do most of your enquiries currently come through WhatsApp or Instagram?",
